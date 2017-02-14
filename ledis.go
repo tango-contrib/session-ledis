@@ -23,9 +23,9 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/lunny/log"
 	"github.com/lunny/tango"
-	"github.com/qiniu/log"
-	client "github.com/siddontang/ledisdb/client/go/ledis"
+	"github.com/siddontang/goredis"
 	"github.com/tango-contrib/session"
 )
 
@@ -42,7 +42,7 @@ type Options struct {
 type LedisStore struct {
 	Options
 	tango.Logger
-	client *client.Client
+	client *goredis.Client
 }
 
 func preOptions(opts []Options) Options {
@@ -66,25 +66,22 @@ func preOptions(opts []Options) Options {
 func New(opts ...Options) (*LedisStore, error) {
 	opt := preOptions(opts)
 
-	cfg := new(client.Config)
-	cfg.Addr = opt.Host + ":" + opt.Port
-	cfg.MaxIdleConns = 4
+	var ledis = LedisStore{
+		Options: opt,
+		client:  goredis.NewClient(opt.Host+":"+opt.Port, ""),
+		Logger:  log.Std,
+	}
 
-	c := client.NewClient(cfg)
-	if _, err := c.Do("PING"); err != nil {
+	if _, err := ledis.Do("PING"); err != nil {
 		return nil, err
 	}
 
-	_, err := c.Do("SELECT", opt.DbIndex)
+	_, err := ledis.Do("SELECT", opt.DbIndex)
 	if err != nil {
 		return nil, err
 	}
 
-	return &LedisStore{
-		Options: opt,
-		client:  c,
-		Logger:  log.Std,
-	}, nil
+	return &ledis, nil
 }
 
 func (c *LedisStore) serialize(value interface{}) ([]byte, error) {
@@ -149,8 +146,15 @@ func (c *LedisStore) registerGobConcreteType(value interface{}) error {
 	return nil
 }
 
+// Do execute command
 func (s *LedisStore) Do(cmd string, args ...interface{}) (interface{}, error) {
-	return s.client.Do(cmd, args...)
+	conn, err := s.client.Get()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	return conn.Do(cmd, args...)
 }
 
 // Set sets value to given key in session.
@@ -162,7 +166,7 @@ func (s *LedisStore) Set(id session.Id, key string, val interface{}) error {
 	_, err = s.Do("HSET", id, key, bs)
 	if err == nil {
 		// when write data, reset maxage
-		_, err = s.Do("EXPIRE", id, s.MaxAge)
+		_, err = s.Do("HEXPIRE", id, s.MaxAge)
 	}
 	return err
 }
@@ -176,9 +180,9 @@ func (s *LedisStore) Get(id session.Id, key string) interface{} {
 	}
 
 	// when read data, reset maxage
-	s.Do("EXPIRE", id, s.MaxAge)
+	s.Do("HEXPIRE", id, s.MaxAge)
 
-	item, err := client.Bytes(val, err)
+	item, err := goredis.Bytes(val, err)
 	if err != nil {
 		s.Logger.Errorf("redis.Bytes failed: %s", err)
 		return nil
@@ -209,7 +213,7 @@ func (s *LedisStore) Add(id session.Id) bool {
 
 func (s *LedisStore) Exist(id session.Id) bool {
 	b, err := s.Do("EXISTS", id)
-	v, _ := client.Int(b, err)
+	v, _ := goredis.Int(b, err)
 	return v > 0
 }
 
@@ -219,7 +223,7 @@ func (s *LedisStore) SetMaxAge(maxAge time.Duration) {
 
 func (s *LedisStore) SetIdMaxAge(id session.Id, maxAge time.Duration) {
 	if s.Exist(id) {
-		s.Do("EXPIRE", id, s.MaxAge)
+		s.Do("HEXPIRE", id, s.MaxAge)
 	}
 }
 
