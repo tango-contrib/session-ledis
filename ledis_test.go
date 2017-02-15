@@ -65,7 +65,11 @@ func TestSession(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	recorder.Body = buff
 
-	store, _ := New()
+	store, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	tg := tango.Classic()
 	tg.Use(session.New(session.Options{
 		Store: store,
@@ -74,7 +78,7 @@ func TestSession(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "http://localhost:8000/", nil)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	tg.ServeHTTP(recorder, req)

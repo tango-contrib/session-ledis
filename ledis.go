@@ -203,7 +203,7 @@ func (s *LedisStore) Del(id session.Id, key string) bool {
 }
 
 func (s *LedisStore) Clear(id session.Id) bool {
-	_, err := s.Do("DEL", id)
+	_, err := s.Do("HCLEAR", id)
 	return err == nil
 }
 
@@ -212,7 +212,7 @@ func (s *LedisStore) Add(id session.Id) bool {
 }
 
 func (s *LedisStore) Exist(id session.Id) bool {
-	b, err := s.Do("EXISTS", id)
+	b, err := s.Do("HLEN", id)
 	v, _ := goredis.Int(b, err)
 	return v > 0
 }
