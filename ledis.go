@@ -23,25 +23,27 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/tango-contrib/session"
+
 	"github.com/lunny/log"
 	"github.com/lunny/tango"
 	"github.com/siddontang/goredis"
-	"github.com/tango-contrib/session"
 )
 
 var _ session.Store = &LedisStore{}
 
+// Options describes the options for create ledis store
 type Options struct {
 	Host    string
 	Port    string
 	DbIndex int
 	MaxAge  time.Duration
+	Logger  tango.Logger
 }
 
 // LedisStore represents a ledis session store implementation.
 type LedisStore struct {
 	Options
-	tango.Logger
 	client *goredis.Client
 }
 
@@ -59,6 +61,9 @@ func preOptions(opts []Options) Options {
 	if opt.MaxAge == 0 {
 		opt.MaxAge = session.DefaultMaxAge
 	}
+	if opt.Logger == nil {
+		opt.Logger = log.Std
+	}
 	return opt
 }
 
@@ -69,7 +74,6 @@ func New(opts ...Options) (*LedisStore, error) {
 	var ledis = LedisStore{
 		Options: opt,
 		client:  goredis.NewClient(opt.Host+":"+opt.Port, ""),
-		Logger:  log.Std,
 	}
 
 	if _, err := ledis.Do("PING"); err != nil {
