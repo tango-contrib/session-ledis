@@ -188,6 +188,9 @@ func (s *LedisStore) Get(id session.Id, key string) interface{} {
 
 	item, err := goredis.Bytes(val, err)
 	if err != nil {
+		if err == goredis.ErrNil {
+			return nil
+		}
 		s.Logger.Errorf("redis.Bytes failed: %s", err)
 		return nil
 	}
